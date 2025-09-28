@@ -1,11 +1,53 @@
 <!doctype html>
 <html>
-  <body style="margin:0;background:#eee">
-    <iframe
-      src="https://preview.p5js.org/cuvner/embed/b6GkEFxCn"
-      width="800" height="400"
-      style="border:0; display:block; margin:20px auto; background:transparent"
-      loading="lazy" allow="fullscreen" referrerpolicy="no-referrer">
-    </iframe>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <title>p5 embed (no wrapper)</title>
+  <style>
+    body{margin:0;background:#eee;display:grid;place-items:center;min-height:100vh}
+    iframe{width:800px;height:400px;border:0;border-radius:12px;background:#000}
+    code{font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace}
+  </style>
+</head>
+<body>
+
+<div>
+  <div id="url" style="margin:8px 0; text-align:center"></div>
+  <iframe id="frame" allow="fullscreen" loading="lazy" referrerpolicy="no-referrer"></iframe>
+</div>
+
+<script>
+  // The link you currently have (can be /full, /present, /sketches or already preview)
+  const RAW = "https://editor.p5js.org/cuvner/full/b6GkEFxCn";
+
+  function toP5Embed(raw){
+    try{
+      const u = new URL(raw);
+
+      // Already correct → keep
+      if (u.hostname === "preview.p5js.org" && /^\/[^/]+\/embed\/[^/]+/.test(u.pathname)) return raw;
+
+      if (u.hostname === "editor.p5js.org") {
+        // /user/full/id   or  /user/present/id
+        let m = u.pathname.match(/^\/([^/]+)\/(full|present)\/([^/]+)/);
+        if (m) return `https://preview.p5js.org/${m[1]}/embed/${m[3]}`;
+
+        // /user/sketches/id[/...]
+        m = u.pathname.match(/^\/([^/]+)\/sketches\/([^/]+)/);
+        if (m) return `https://preview.p5js.org/${m[1]}/embed/${m[2]}`;
+      }
+      return raw; // non-editor links (self-hosted) untouched
+    } catch { return raw; }
+  }
+
+  const EMBED = toP5Embed(RAW);
+  document.getElementById("url").innerHTML =
+    `<div>Embedding: <code>${EMBED}</code></div>`;
+  document.getElementById("frame").src = EMBED;
+
+  // Also log to console so you can double-check
+  console.log("raw:", RAW);
+  console.log("embed used:", EMBED);
+</script>
+</body>
 </html>
