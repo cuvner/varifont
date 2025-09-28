@@ -1,66 +1,120 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Combinatory Poetry Wall</title>
+  <meta charset="utf-8" />
+  <title>Combinatory p5 Poetry</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    body { background:#eee; font-family: sans-serif; padding:20px; }
-    .poem { margin-bottom: 30px; font-size: 1.5rem; line-height: 2.2rem; }
-    iframe {
-      display:inline-block;
-      width:150px; height:80px;
-      vertical-align:middle;
-      border:none;
-    }
+    :root { --bg:#eee; --ink:#111; }
+    body { margin:0; padding:24px; background:var(--bg); color:var(--ink); font: 400 20px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    h1 { margin:0 0 16px; font-weight:700; }
+    .toolbar { display:flex; gap:8px; margin-bottom:16px; }
+    button { border:1px solid #bbb; padding:8px 12px; border-radius:10px; background:#fff; cursor:pointer; }
+    .poems { display:grid; gap:22px; }
+    .line { font-size:32px; line-height:1.3; word-wrap:anywhere; }
+    iframe { display:inline-block; width:220px; height:110px; vertical-align:middle; border:0; border-radius:10px; background:#000; }
+    .small iframe { width:160px; height:90px; }
+    .muted { opacity:.4 }
   </style>
 </head>
 <body>
-  <h1>Combinatory Poetry</h1>
-  <div id="poems"></div>
-  <button id="reshuffle">Reshuffle</button>
+  <h1>Combinatory p5 Poetry</h1>
+  <div class="toolbar">
+    <button id="shuffle">Shuffle all</button>
+    <span class="muted">Powered by Google Sheet → CSV</span>
+  </div>
+  <div id="poems" class="poems"></div>
 
 <script>
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4yFkVdYOqwXrJhWwltBncbSr1TkfpRdlNALtb2v-IKXUaPzFOccj9-Ik0tfXHy9op_oVroaythjcL/pubhtml"; // from your Google Sheet
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4yFkVdYOqwXrJhWwltBncbSr1TkfpRdlNALtb2v-IKXUaPzFOccj9-Ik0tfXHy9op_oVroaythjcL/pub?output=csv";
 
-let words = { noun: [], verb: [], adjective: [] };
-const templates = [
-  "I {verb} that one day I {verb} a {adjective} {noun}.",
-  "The {noun} is {verb} if I am {adjective}.",
-  "After {verb} up the {adjective} {noun}, the act of {verb} remains."
-];
-
-function random(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
-
-function renderPoems() {
-  const poemsDiv = document.getElementById("poems");
-  poemsDiv.innerHTML = "";
-  templates.forEach(t => {
-    let line = t.replace(/\{(noun|verb|adjective)\}/g, (_, pos) => {
-      let row = random(words[pos]);
-      return row ? `<iframe src="${row.embed_url}" title="${row.word}"></iframe>` : "___";
-    });
-    let p = document.createElement("div");
-    p.className = "poem";
-    p.innerHTML = line;
-    poemsDiv.appendChild(p);
-  });
+// If your headers are slightly different, this resolver tries to find them case-insensitively.
+function pickKey(obj, candidates) {
+  const keys = Object.keys(obj);
+  for (const cand of candidates) {
+    const k = keys.find(kk => kk.trim().toLowerCase() === cand);
+    if (k) return k;
+  }
+  return null;
 }
 
-Papa.parse(CSV_URL, {
+const state = { byPos: { noun:[], verb:[], adjective:[] } };
+
+// Your poem templates. Curly braces indicate slots to fill with iframes.
+const TEMPLATES = [
+  "I {verb} that one day I {verb} a {adjective} {noun}.",
+  "The {noun}. The {adjective} {noun}.",
+  "After {verb} up the {adjective} {noun}. The {noun}.",
+  "The {noun} is {verb} if I am {adjective}.",
+  "…the act of {verb}.",
+];
+
+// Render N lines using the templates (loop if N > templates length)
+function renderPoems(n=10) {
+  const mount = document.getElementById("poems");
+  mount.innerHTML = "";
+  for (let i=0; i<n; i++) {
+    const t = TEMPLATES[i % TEMPLATES.length];
+    const html = t.replace(/\{(noun|verb|adjective)\}/g, (_, pos) => {
+      const choices = state.byPos[pos];
+      if (!choices.length) return `<span class="muted">(${pos})</span>`;
+      const row = choices[Math.floor(Math.random()*choices.length)];
+      const title = (row.word || row.title || "").toString();
+      return `<iframe src="${row.embed_url}" title="${title}"></iframe>`;
+    });
+    const line = document.createElement("div");
+    line.className = "line";
+    line.innerHTML = html;
+    mount.appendChild(line);
+  }
+}
+
+Papa.parse(CSV_URL + "&cb=" + Date.now(), { // cache-buster for fresh edits
   download: true,
   header: true,
-  complete: function(results) {
-    results.data.forEach(row => {
-      if (row.part_of_speech && words[row.part_of_speech]) {
-        words[row.part_of_speech].push(row);
-      }
+  skipEmptyLines: true,
+  complete: ({ data }) => {
+    if (!data || !data.length) {
+      alert("CSV loaded but no rows found. Check your sheet data.");
+      return;
+    }
+    // Figure out header names once from the first row
+    const sample = data[0];
+    const posKey   = pickKey(sample, ["part_of_speech","pos","speech","type","category"]);
+    const urlKey   = pickKey(sample, ["embed_url","url","link","iframe"]);
+    const wordKey  = pickKey(sample, ["word","title","label","text"]);
+    if (!posKey || !urlKey) {
+      console.error("Could not find required columns.", { posKey, urlKey, sample });
+      alert("Missing required headers. Include at least 'part_of_speech' and 'embed_url'.");
+      return;
+    }
+
+    // Normalize and bucket
+    const buckets = { noun:[], verb:[], adjective:[] };
+    data.forEach(r => {
+      const pos = String(r[posKey] || "").trim().toLowerCase();
+      const url = String(r[urlKey] || "").trim();
+      if (!url || !/https?:\/\//.test(url)) return;
+      if (!["noun","verb","adjective"].includes(pos)) return;
+      buckets[pos].push({
+        part_of_speech: pos,
+        embed_url: url,
+        word: r[wordKey] || ""
+      });
     });
-    renderPoems();
+    state.byPos = buckets;
+
+    // Render initial wall
+    renderPoems(12);
+  },
+  error: (err) => {
+    console.error(err);
+    alert("Failed to load the CSV. Open the URL directly to confirm it works.");
   }
 });
 
-document.getElementById("reshuffle").addEventListener("click", renderPoems);
+document.getElementById("shuffle").addEventListener("click", () => renderPoems(12));
 </script>
 </body>
 </html>
