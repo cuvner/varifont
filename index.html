@@ -2,29 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Combinatory Poetry with p5 Sketch Blocks</title>
+  <title>Combinatory p5 Poetry</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    :root { --scale: .5; } /* 0.5 → shows 400×200. Set 1 for full 800×400. */
-    body{margin:0;padding:24px;background:#f3f4f6;color:#0f172a;font:400 20px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
-    h1{margin:0 0 16px;font-weight:800}
-    .toolbar{display:flex;gap:10px;margin:8px 0 24px}
-    button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;cursor:pointer}
-    .muted{opacity:.6}
+    :root { --scale: .5; } /* 1 = 800x400, .5 = 400x200 */
+    body { margin:0; padding:24px; background:#f3f4f6; color:#0f172a; font: 400 20px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    h1 { margin:0 0 16px; font-weight:800; }
+    .toolbar { display:flex; gap:10px; margin:8px 0 24px; }
+    button { padding:8px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; cursor:pointer; }
+    .muted { opacity:.6; }
+
     /* sentence layout */
-    .line{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:28px;line-height:1.25;margin:18px 0}
-    .txt{display:inline-block}
-    /* sketch frames */
-    .sketch{display:inline-block;border:0;border-radius:12px;background:#000;width:calc(800px * var(--scale));height:calc(400px * var(--scale))}
-    .poems{max-width:1400px}
+    .line { display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:28px; line-height:1.25; margin:18px 0; }
+    .txt { display:inline-block; }
+
+    /* iframe like the original preview app card – but without p5 header */
+    .EmbedFrame__Frame {
+      display:inline-block;
+      width:calc(800px * var(--scale));
+      height:calc(400px * var(--scale));
+      border:0;
+      border-radius:12px;
+      background:#000;
+      overflow:hidden;
+    }
+
+    .poems { max-width:1400px; }
   </style>
 </head>
 <body>
   <h1>Combinatory p5 Poetry</h1>
   <div class="toolbar">
     <button id="shuffleBtn">Shuffle</button>
-    <span class="muted">Sheet → CSV → inline iframes (800×400)</span>
+    <span class="muted">Sheet → CSV → inline p5 embeds</span>
   </div>
 
   <div id="poems" class="poems"></div>
@@ -32,7 +43,7 @@
 <script type="module">
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4yFkVdYOqwXrJhWwltBncbSr1TkfpRdlNALtb2v-IKXUaPzFOccj9-Ik0tfXHy9op_oVroaythjcL/pub?output=csv";
 
-/** Convert any p5 “full/present/sketch page” link to the true embed-only URL. */
+/** Convert p5 share links to the real embed endpoint. */
 function toP5Embed(raw){
   try{
     const u = new URL(raw);
@@ -46,7 +57,7 @@ function toP5Embed(raw){
     m = u.pathname.match(/^\/([^/]+)\/sketches\/([^/]+)\/(full|present)/);
     if(m) return `https://editor.p5js.org/${m[1]}/sketches/${m[2]}/embed`;
 
-    // /user/sketches/id  or  /user/sketches/id/embed
+    // /user/sketches/id  or already /embed
     m = u.pathname.match(/^\/([^/]+)\/sketches\/([^/]+)(?:\/embed)?$/);
     if(m) return `https://editor.p5js.org/${m[1]}/sketches/${m[2]}/embed`;
 
@@ -54,33 +65,37 @@ function toP5Embed(raw){
   }catch{ return raw; }
 }
 
-const state = { noun:[], verb:[], adjective:[] };
-
 function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-/** Build an inline sketch iframe (800×400 scaled by --scale). */
+const state = { noun:[], verb:[], adjective:[] };
+
 function sketchIframe(src, title=""){
   const embed = toP5Embed(src);
-  return `<iframe class="sketch" src="${embed}" title="${title}" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
+  // Attributes similar to original preview; sandbox omitted to allow p5 to run
+  return `<iframe class="EmbedFrame__Frame"
+                  src="${embed}"
+                  title="${title}"
+                  loading="lazy"
+                  allow="fullscreen; autoplay; xr-spatial-tracking; clipboard-read; clipboard-write"
+                  referrerpolicy="no-referrer"></iframe>`;
 }
 
-/** Render N lines from templates, replacing {noun|verb|adjective} with iframes. */
 function render(n=8){
   const TEMPLATES = [
     "I {verb} that one day I {verb} a {adjective} {noun}.",
     "The {noun}. The {adjective} {noun}.",
     "After {verb} up the {adjective} {noun}. The {noun}.",
     "The {noun} is {verb} if I am {adjective}.",
-    "...the act of {verb}.",
+    "...the act of {verb}."
   ];
   const mount = document.getElementById("poems");
   mount.innerHTML = "";
+
   for(let i=0;i<n;i++){
     const t = TEMPLATES[i % TEMPLATES.length];
     const line = document.createElement("div");
     line.className = "line";
 
-    // split template into tokens of text and placeholders
     t.split(/(\{noun\}|\{verb\}|\{adjective\})/g).forEach(tok=>{
       const m = tok.match(/^\{(noun|verb|adjective)\}$/);
       if(m){
@@ -106,7 +121,6 @@ function render(n=8){
   }
 }
 
-// Load the CSV and bucket rows by part_of_speech
 Papa.parse(CSV_URL + "&cb=" + Date.now(), {
   download: true,
   header: true,
@@ -124,7 +138,7 @@ Papa.parse(CSV_URL + "&cb=" + Date.now(), {
   },
   error: err => {
     console.error(err);
-    alert("Could not load the sheet CSV. Open the CSV URL directly to confirm it’s public.");
+    alert("Could not load the sheet CSV; open it directly to confirm it’s public.");
   }
 });
 
