@@ -1,1 +1,66 @@
-hello
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Combinatory Poetry Wall</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { background:#eee; font-family: sans-serif; padding:20px; }
+    .poem { margin-bottom: 30px; font-size: 1.5rem; line-height: 2.2rem; }
+    iframe {
+      display:inline-block;
+      width:150px; height:80px;
+      vertical-align:middle;
+      border:none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Combinatory Poetry</h1>
+  <div id="poems"></div>
+  <button id="reshuffle">Reshuffle</button>
+
+<script>
+const CSV_URL = "PASTE-YOUR-PUBLISHED-CSV-LINK"; // from your Google Sheet
+
+let words = { noun: [], verb: [], adjective: [] };
+const templates = [
+  "I {verb} that one day I {verb} a {adjective} {noun}.",
+  "The {noun} is {verb} if I am {adjective}.",
+  "After {verb} up the {adjective} {noun}, the act of {verb} remains."
+];
+
+function random(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+function renderPoems() {
+  const poemsDiv = document.getElementById("poems");
+  poemsDiv.innerHTML = "";
+  templates.forEach(t => {
+    let line = t.replace(/\{(noun|verb|adjective)\}/g, (_, pos) => {
+      let row = random(words[pos]);
+      return row ? `<iframe src="${row.embed_url}" title="${row.word}"></iframe>` : "___";
+    });
+    let p = document.createElement("div");
+    p.className = "poem";
+    p.innerHTML = line;
+    poemsDiv.appendChild(p);
+  });
+}
+
+Papa.parse(CSV_URL, {
+  download: true,
+  header: true,
+  complete: function(results) {
+    results.data.forEach(row => {
+      if (row.part_of_speech && words[row.part_of_speech]) {
+        words[row.part_of_speech].push(row);
+      }
+    });
+    renderPoems();
+  }
+});
+
+document.getElementById("reshuffle").addEventListener("click", renderPoems);
+</script>
+</body>
+</html>
