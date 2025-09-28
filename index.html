@@ -2,111 +2,87 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Combinatory p5 Poetry</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Combinatory Poetry (clone)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    :root { --scale: .5; } /* 1 = 800x400, .5 = 400x200 */
-    body { margin:0; padding:24px; background:#f3f4f6; color:#0f172a;
-           font: 400 20px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    h1 { margin:0 0 16px; font-weight:800; }
-    .toolbar { display:flex; gap:10px; margin:8px 0 24px; }
-    button { padding:8px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; cursor:pointer; }
-    .muted { opacity:.6; }
-    .poems { max-width:1400px; }
-    .line { display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:28px; line-height:1.25; margin:18px 0; }
-    .txt { display:inline-block; }
-    iframe.sketch { display:inline-block; width:calc(800px * var(--scale)); height:calc(400px * var(--scale));
-                    border:0; border-radius:12px; background:#000; overflow:hidden; }
+    :root { --scale:.5; } /* 1 = 800×400; .5 = 400×200 */
+    body{margin:0;padding:24px;background:#f3f4f6;color:#0f172a;
+         font:400 20px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    h1{margin:0 0 16px;font-weight:800}
+    .toolbar{display:flex;gap:10px;margin:8px 0 24px}
+    button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;cursor:pointer}
+    .muted{opacity:.6}
+    .poems{max-width:1400px}
+    .line{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:28px;line-height:1.25;margin:18px 0}
+    .txt{display:inline-block}
+    iframe.sketch{display:inline-block;width:calc(800px*var(--scale));height:calc(400px*var(--scale));
+                  border:0;border-radius:12px;background:#000;overflow:hidden}
   </style>
 </head>
 <body>
   <h1>Combinatory p5 Poetry</h1>
   <div class="toolbar">
     <button id="shuffleBtn">Shuffle</button>
-    <span class="muted">Sheet → CSV → inline p5 embeds (800×400)</span>
+    <span class="muted">Sheet → CSV → inline p5 embeds</span>
   </div>
-
   <div id="poems" class="poems"></div>
 
 <script type="module">
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4yFkVdYOqwXrJhWwltBncbSr1TkfpRdlNALtb2v-IKXUaPzFOccj9-Ik0tfXHy9op_oVroaythjcL/pub?output=csv";
+const CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1YP7WB0xw4WJ3QZ3BbuR2-_iyqPzY-dVN8N-KztHCz-o/pub?gid=0&single=true&output=csv"; // from their site
 
-/* Convert p5 share links to an embed. Prefer preview.p5js.org; otherwise leave original. */
-function toP5Embed(raw){
+// Turn common p5 editor links into the *current* embed host (preview.p5js.org)
+function toP5PreviewEmbed(raw){
   try{
     const u = new URL(raw);
+    // Already preview embed?
+    if (u.hostname === "preview.p5js.org" && /^\/[^/]+\/embed\/[^/]+/.test(u.pathname)) return raw;
 
-    // Only handle p5 editor/preview links
-    if (!/p5js\.org$/.test(u.hostname)) return raw;
-
-    // Patterns we might get:
-    // 1) https://editor.p5js.org/<user>/full/<id>
-    // 2) https://editor.p5js.org/<user>/present/<id>
-    // 3) https://editor.p5js.org/<user>/sketches/<id>
-    // 4) https://preview.p5js.org/<user>/embed/<id>  (ideal)
-    // 5) Already blob: (ignore), or other assets.
-
-    // If it's already preview embed, keep it
-    let m = u.hostname === "preview.p5js.org"
-      ? u.pathname.match(/^\/([^/]+)\/embed\/([^/]+)/)
-      : null;
-    if (m) return raw;
-
-    // editor -> preview embed
     if (u.hostname === "editor.p5js.org") {
-      // /user/full/id or /user/present/id
-      m = u.pathname.match(/^\/([^/]+)\/(full|present)\/([^/]+)/);
+      // /user/full/id  or /user/present/id
+      let m = u.pathname.match(/^\/([^/]+)\/(full|present)\/([^/]+)/);
       if (m) return `https://preview.p5js.org/${m[1]}/embed/${m[3]}`;
-
-      // /user/sketches/id[/anything]
+      // /user/sketches/id[/...]
       m = u.pathname.match(/^\/([^/]+)\/sketches\/([^/]+)/);
       if (m) return `https://preview.p5js.org/${m[1]}/embed/${m[2]}`;
     }
-
-    // Fallback: return original URL (may show p5 header if it's /full)
+    // Non p5 links (self-hosted) → leave as-is
     return raw;
-  } catch {
-    return raw;
-  }
+  } catch { return raw; }
 }
-
-function rand(a){ return a[Math.floor(Math.random()*a.length)]; }
 
 const state = { noun:[], verb:[], adjective:[] };
+const TEMPLATES = [
+  "I {verb} that one day I {verb} a {adjective} {noun}.",
+  "The {noun}. The {adjective} {noun}.",
+  "After {verb} up the {adjective} {noun}. The {noun}.",
+  "The {noun} is {verb} if I am {adjective}.",
+  "...the act of {verb}."
+];
 
+function rand(a){ return a[Math.floor(Math.random()*a.length)]; }
 function sketchIframe(src, title=""){
-  const embed = toP5Embed(src);
-  return `<iframe class="sketch"
-                  src="${embed}"
-                  title="${title}"
-                  loading="lazy"
-                  allow="fullscreen; autoplay; xr-spatial-tracking; clipboard-read; clipboard-write"
-                  referrerpolicy="no-referrer"></iframe>`;
+  const embed = toP5PreviewEmbed(src);
+  return `<iframe class="sketch" src="${embed}" title="${title}"
+           loading="lazy" allow="fullscreen; autoplay; xr-spatial-tracking; clipboard-read; clipboard-write"
+           referrerpolicy="no-referrer"></iframe>`;
 }
 
-function render(n=8){
-  const TEMPLATES = [
-    "I {verb} that one day I {verb} a {adjective} {noun}.",
-    "The {noun}. The {adjective} {noun}.",
-    "After {verb} up the {adjective} {noun}. The {noun}.",
-    "The {noun} is {verb} if I am {adjective}.",
-    "...the act of {verb}."
-  ];
+function render(n=10){
   const mount = document.getElementById("poems");
   mount.innerHTML = "";
-
   for (let i=0;i<n;i++){
     const t = TEMPLATES[i % TEMPLATES.length];
     const line = document.createElement("div");
     line.className = "line";
     t.split(/(\{noun\}|\{verb\}|\{adjective\})/g).forEach(tok=>{
-      const pm = tok.match(/^\{(noun|verb|adjective)\}$/);
-      if (pm){
-        const pos = pm[1];
+      const m = tok.match(/^\{(noun|verb|adjective)\}$/);
+      if (m){
+        const pos = m[1];
         const row = rand(state[pos]);
-        if (row) {
-          line.insertAdjacentHTML("beforeend", sketchIframe(row.embed_url, row.word || row.title || ""));
+        if (row){
+          line.insertAdjacentHTML("beforeend", sketchIframe(row.sketchLink, row.wordClass));
         } else {
           const s = document.createElement("span");
           s.className = "txt muted";
@@ -125,24 +101,19 @@ function render(n=8){
 }
 
 Papa.parse(CSV_URL + "&cb=" + Date.now(), {
-  download: true,
-  header: true,
-  skipEmptyLines: true,
+  download:true, header:true, skipEmptyLines:true,
   complete: ({data})=>{
     state.noun = []; state.verb = []; state.adjective = [];
     data.forEach(r=>{
-      const pos = (r.part_of_speech || r.pos || "").toLowerCase();
-      const url = (r.embed_url || r.url || "").trim();
-      if (["noun","verb","adjective"].includes(pos) && /^https?:\/\//.test(url)) {
-        state[pos].push({ ...r, embed_url: url });
+      const cls = (r.wordClass || "").toLowerCase();
+      const link = (r.sketchLink || "").trim();
+      if (["noun","verb","adjective"].includes(cls) && /^https?:\/\//.test(link)) {
+        state[cls].push(r);
       }
     });
     render(10);
   },
-  error: err => {
-    console.error(err);
-    alert("Could not load the sheet CSV; open it directly to confirm it’s public.");
-  }
+  error: err => { console.error(err); alert("Could not load the sheet CSV."); }
 });
 
 document.getElementById("shuffleBtn").addEventListener("click", ()=>render(10));
